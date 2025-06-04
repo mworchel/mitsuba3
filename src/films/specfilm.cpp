@@ -323,7 +323,7 @@ public:
             m_storage->clear();
     }
 
-    TensorXf develop(bool raw = false) const override {
+    TensorXf develop(bool raw = false, bool detach_weight_division = false) const override {
         if (!m_storage)
             Throw("No storage allocated, was prepare() called first?");
 
@@ -365,7 +365,7 @@ public:
                   values = dr::gather<Float>(data, values_idx);
 
             // Perform the weight division unless the weight is zero
-            values /= dr::select(weight == 0.f, 1.f, weight);
+            values /= dr::select(weight == 0.f, 1.f, detach_weight_division ? dr::detach(weight) : weight);
 
             size_t shape[3] = { (size_t) size.y(), (size_t) size.x(),
                                 target_ch };

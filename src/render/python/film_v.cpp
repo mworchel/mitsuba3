@@ -36,8 +36,8 @@ public:
         NB_OVERRIDE_PURE(clear);
     }
 
-    TensorXf develop(bool raw = false) const override {
-        NB_OVERRIDE_PURE(develop, raw);
+    TensorXf develop(bool raw = false, bool detach_weight_division = false) const override {
+        NB_OVERRIDE_PURE(develop, raw, detach_weight_division);
     }
 
     ref<Bitmap> bitmap(bool raw = false) const override {
@@ -91,7 +91,7 @@ MI_PY_EXPORT(Film) {
         .def_method(Film, prepare, "aovs"_a)
         .def_method(Film, put_block, "block"_a)
         .def_method(Film, clear)
-        .def_method(Film, develop, "raw"_a = false)
+        .def_method(Film, develop, "raw"_a = false, "detach_weight_division"_a = false)
         .def_method(Film, bitmap, "raw"_a = false)
         .def_method(Film, write, "path"_a)
         .def_method(Film, sample_border)
