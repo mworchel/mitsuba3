@@ -909,6 +909,11 @@ class PSIntegrator(ADIntegrator):
             else:
                 return runtime_spp
 
+    def prepare_silhouette(self, sensor: mi.Sensor, seed: mi.UInt32, spp: int, aovs: list):
+        sampler, spp = self.prepare(sensor, seed, spp, aovs)
+        sample_scale = dr.prod(sensor.film().crop_size()) / sampler.wavefront_size()
+        return sampler, spp, sample_scale
+
     def render_ad(self,
                   scene: mi.Scene,
                   sensor: Union[int, mi.Sensor],
@@ -965,16 +970,16 @@ class PSIntegrator(ADIntegrator):
             with dr.suspend_grad():
                 self.proj_detail.init_primarily_visible_silhouette(scene, sensor)
 
-            sampler, spp = self.prepare(sensor, 0xffffffff ^ seed, sppp, aovs)
-            result_img += self.render_primarily_visible_silhouette(scene, sensor, sampler, spp)
+            sampler, spp, sample_scale = self.prepare_silhouette(sensor, 0xffffffff ^ seed, sppp, aovs)
+            result_img += self.render_primarily_visible_silhouette(scene, sensor, sampler, spp, sample_scale)
 
         # Indirect discontinuous derivative
         if sppi > 0 and has_silhouettes:
             with dr.suspend_grad():
                 self.proj_detail.init_indirect_silhouette(scene, sensor, 0xafafafaf ^ seed)
 
-            sampler, spp = self.prepare(sensor, 0xaa00aa00 ^ seed, sppi, aovs)
-            result_img += self.render_indirect_silhouette(scene, sensor, sampler, spp)
+            sampler, spp, sample_scale = self.prepare_silhouette(sensor, 0xaa00aa00 ^ seed, sppi, aovs)
+            result_img += self.render_indirect_silhouette(scene, sensor, sampler, spp, sample_scale)
 
         ## Continuous derivative (only if radiative backpropagation is not used)
         if sppc > 0 and (not self.radiative_backprop):
@@ -1096,7 +1101,8 @@ class PSIntegrator(ADIntegrator):
                                             scene: mi.Scene,
                                             sensor: mi.Sensor,
                                             sampler: mi.Sampler,
-                                            spp: int) -> mi.TensorXf:
+                                            spp: int,
+                                            sample_scale: float) -> mi.TensorXf:
         """
         Renders the primarily visible discontinuities.
 
@@ -1146,7 +1152,7 @@ class PSIntegrator(ADIntegrator):
         block.set_coalesce(block.coalesce() and spp >= 4)
         ADIntegrator._splat_to_block(
             block, film, sensor_ds.uv,
-            value=derivative * dr.rcp(mi.ScalarFloat(spp)),
+            value=derivative * sample_scale,
             weight=0,
             alpha=1,
             aovs=[],
@@ -1241,7 +1247,8 @@ class PSIntegrator(ADIntegrator):
                                    scene: mi.Scene,
                                    sensor: mi.Sensor,
                                    sampler: mi.Sampler,
-                                   spp: int) -> mi.TensorXf:
+                                   spp: int,
+                                   sample_scale: float) -> mi.TensorXf:
         film = sensor.film()
         film.prepare(self.aov_names(film))
 
@@ -1255,7 +1262,7 @@ class PSIntegrator(ADIntegrator):
             active = dr.any(value != 0)
 
             # Account for the guiding sampling density and spp
-            value *= rcp_pdf_guiding * dr.rcp(spp)
+            value *= rcp_pdf_guiding * sample_scale
 
             # Splat the result to the film
             block = film.create_block(normalize=True)
